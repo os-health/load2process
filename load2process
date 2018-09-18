@@ -1,0 +1,55 @@
+#!/bin/bash
+
+set -o errtrace
+trap 'status=$?;echo -e "Param is err.\n";show_usage;exit $status' ERR
+
+function show_usage() {
+    echo "param is -r -d -s -h."
+}
+
+running=''
+disksleep=''
+summary=''
+
+getopt_info=$(getopt -q -o 'rdsh' -l 'running,disksleep,summary,help' -- "$@")
+eval set -- "$getopt_info"
+
+while [ $1 != '--' ]
+do
+    case $1 in
+        -r|--running)
+            running='true'
+            ;;
+        -d|--disksleep)
+            disksleep='true'
+            ;;
+        -s|--summary)
+            summary='true'
+            ;;
+        -h|--help)
+            show_usage
+            exit 0
+            ;;
+        *)
+            ;;
+    esac
+    shift
+done
+
+if [[ -n $summary ]];then
+    if [[ -n $running && -z $disksleep ]];then
+        ps -e -L h o state,ucmd  | awk '{if($1=="R"){print $0}}' | wc -l
+    elif [[ -z $running && -n $disksleep ]];then
+        ps -e -L h o state,ucmd  | awk '{if($1=="D"){print $0}}' | wc -l
+    else
+        ps -e -L h o state,ucmd  | awk '{if($1=="R"||$1=="D"){print $0}}' | wc -l
+    fi
+else
+    if [[ -n $running && -z $disksleep ]];then
+        ps -e -L h o state,ucmd  | awk '{if($1=="R"){print $0}}' | sort | uniq -c | sort -k 1nr
+    elif [[ -z $running && -n $disksleep ]];then
+        ps -e -L h o state,ucmd  | awk '{if($1=="D"){print $0}}' | sort | uniq -c | sort -k 1nr
+    else
+        ps -e -L h o state,ucmd  | awk '{if($1=="R"||$1=="D"){print $0}}' | sort | uniq -c | sort -k 1nr
+    fi
+fi
