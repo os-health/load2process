@@ -1,0 +1,51 @@
+#!/bin/bash
+load_threshold=2
+thread_threshold=0.4
+eval set -- $(getopt -q -o "l:t:"  -l "load_threshold:,thread_threshold:" -- "$@")
+while [ $1 != '--' ]
+do
+    case $1 in
+        -l|--load_threshold)
+            load_threshold=$2
+            shift
+            ;;
+        -t|--thread_threshold)
+            thread_threshold=$2
+            shift
+            ;;
+        *)
+            ;;
+    esac
+    shift
+done
+cpu_vcore=$(cat /proc/cpuinfo | grep -w processor | wc -l)
+ps_info=$(ps -eL h o state,ucmd | awk '{if($1=="R"||$1=="D"){print $0}}' | sort | uniq -c)
+load_five_second=$(echo "$ps_info" | awk 'BEGIN{sum=0}{sum=sum+$1}END{print sum}')
+load_baseline=$(awk -v x=$cpu_vcore -v y=$load_threshold 'BEGIN{printf "%.0f",x*y}')
+thread_baseline=$(awk -v x=$cpu_vcore -v y=$thread_threshold 'BEGIN{printf "%.0f",x*y}')
+
+if [ $load_five_second -gt $load_baseline ];then
+    output='{"check_state":0,"data":['
+    i=0
+    IFS_old=$IFS
+    IFS=$'\n'
+    for line in $(echo "$ps_info")
+    do
+        load_num=`     echo $line | awk '{print $1}'`
+        process_state=`echo $line | awk '{print $2}'`
+        process_name=` echo $line | awk '{print $3}'`
+        if [ $load_num -lt $thread_baseline ];then
+            continue
+        fi
+        if [[ $i != 0 ]];then
+            output=$output','
+        fi
+        output=$output'{"load_num":'$load_num',"process_name_state":"'$process_name' '$process_state'"}'
+        i=$((i+1))
+    done
+    IFS=$IFS_old
+    output=$output']}'
+else 
+    output='{"check_state":1,"data":[]}'
+fi
+echo $output
